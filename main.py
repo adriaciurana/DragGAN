@@ -74,9 +74,13 @@ def generate_reg_masks(M, output_size=256, dims=128):
         .expand(-1, dims, -1, -1)
 
 def get_F(w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor, G: nn.Module):
+
     global F0
 
     F_r = [None]
+    def forward_layer_hook(F_r, module, input, output):
+        F_r[0] = output[0]
+        
     G.synthesis.b256.register_forward_hook(partial(forward_layer_hook, F_r))
 
     # Features
@@ -90,9 +94,6 @@ def get_F(w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor, G: nn.Module
         F0 = F.detach().clone()
 
     return F
-
-def forward_layer_hook(F_r, module, input, output):
-    F_r[0] = output[0]
 
 def compute_motion_step(
     pbar: qqdm, 
@@ -159,8 +160,8 @@ def compute_point_tracking(
     F = get_F(w_latent_learn, w_latent_fix, G)
     F_exp = F.expand(qr2_mask.shape[0], -1, -1, -1) # N x C x H x W
 
-    Fq = torch.nn.functional.grid_sample(F_exp.float(), qr2_mask.float(), mode='bilinear', align_corners=False)
     f_i = torch.nn.functional.grid_sample(F0_exp.float(), p_mask.float(), mode='bilinear', align_corners=False)
+    Fq = torch.nn.functional.grid_sample(F_exp.float(), qr2_mask.float(), mode='bilinear', align_corners=False)
     
     if distance_type == "l1":
         f_i_mat = f_i.reshape(f_i.shape[0], f_i.shape[1], -1).permute(0, 2, 1) # B x L x C
