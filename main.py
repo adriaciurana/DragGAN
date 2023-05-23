@@ -74,13 +74,12 @@ def generate_reg_masks(M, output_size=256, dims=128):
         .expand(-1, dims, -1, -1)
 
 def get_F(w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor, G: nn.Module):
-
     global F0
 
     F_r = [None]
     def forward_layer_hook(F_r, module, input, output):
         F_r[0] = output[0]
-        
+
     G.synthesis.b256.register_forward_hook(partial(forward_layer_hook, F_r))
 
     # Features
