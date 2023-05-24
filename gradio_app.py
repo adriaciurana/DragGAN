@@ -6,6 +6,7 @@ import gradio as gr
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
+from tempfile import NamedTemporaryFile
 
 from drag_gan import DragGAN
 
@@ -304,6 +305,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                     label="Draw Interval (steps)",
                                     interactive=True,
                                 ).style(full_width=False)
+                                form_download_result = gr.File(label="Download result", visible=False).style(full_width=True)
 
                         with gr.Tab("Hyperparameters"):
                             with gr.Row():
@@ -523,7 +525,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     global_state["points"],
                     global_state["curr_point"],
                 )
-                return global_state, 0, image_draw
+                return global_state, 0, image_draw, gr.Button.update(visible=False)
 
             for key_point, point in global_state["points"].items():
                 try:
@@ -616,20 +618,26 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 )
 
                 if step_idx % global_state["draw_interval"] == 0:
-                    yield global_state, step_idx, image_draw
+                    yield global_state, step_idx, image_draw, gr.Button.update(visible=False)
                 step_idx += 1
 
         form_start_btn.click(
             on_click_start,
             inputs=[global_state],
-            outputs=[global_state, form_steps_number, form_image_draw],
+            outputs=[global_state, form_steps_number, form_image_draw, form_download_result],
         )
 
         def on_click_stop(global_state):
             global_state["restart_params"]["stop"] = True
-            return global_state
 
-        form_stop_btn.click(on_click_stop, inputs=[global_state], outputs=[global_state])
+            w_latent = global_state["restart_params"]["w_latent"]
+            image_result = drag_gan.generate(w_latent)
+            
+            fp = NamedTemporaryFile(suffix=".png", delete=False)
+            image_result.save(fp, "PNG")
+            return global_state, gr.File.update(visible=True, value=fp.name)
+
+        form_stop_btn.click(on_click_stop, inputs=[global_state], outputs=[global_state, form_download_result])
 
         form_draw_interval.change(
             partial(
