@@ -14,6 +14,9 @@ Use pytorch hooks that allow flexibility for future styleganv2 networks. From th
 
 # GUI
 Additionally, a GUI has been created to be able to apply the paper to images.
+```
+python gradio_app.py
+```
 
 # Contributions
 I'm glad you want to contribute and improve the code :)
