@@ -126,11 +126,11 @@ def on_change_single_global_state(keys, value, global_state, map_transform=None)
     if map_transform is not None:
         value = map_transform(value)
 
+    curr_state = global_state
     if isinstance(keys, str):
         last_key = keys
 
     else:
-        curr_state = global_state
         for k in keys[:-1]:
             curr_state = curr_state[k]
 
@@ -482,7 +482,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             partial(
                 on_change_single_global_state,
                 ["params", "trainable_w_dims"],
-                lambda x: int(x),
+                map_transform=lambda x: int(x),
             ),
             inputs=[form_trainable_w_dims_number, global_state],
             outputs=[global_state],
@@ -512,7 +512,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             partial(
                 on_change_single_global_state,
                 ["params", "r1_in_pixels"],
-                lambda x: int(x),
+                map_transform=lambda x: int(x),
             ),
             inputs=[form_r1_in_pixels_number, global_state],
             outputs=[global_state],
@@ -522,7 +522,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             partial(
                 on_change_single_global_state,
                 ["params", "r2_in_pixels"],
-                lambda x: int(x),
+                map_transform=lambda x: int(x),
             ),
             inputs=[form_r2_in_pixels_number, global_state],
             outputs=[global_state],
@@ -654,8 +654,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
 
         form_draw_interval.change(
-            partial(on_change_single_global_state, "draw_interval", lambda x: int(x)),
-            inputs=[global_state],
+            partial(on_change_single_global_state, "draw_interval", map_transform=lambda x: int(x)),
+            inputs=[form_draw_interval, global_state],
             outputs=[global_state],
         )
 
@@ -713,7 +713,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
 
         form_radius_mask_number.change(
-            partial(on_change_single_global_state, "radius_mask", lambda x: int(x)),
+            partial(on_change_single_global_state, "radius_mask", map_transform=lambda x: int(x)),
             inputs=[form_radius_mask_number, global_state],
             outputs=[global_state],
         )
