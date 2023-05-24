@@ -540,11 +540,6 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 t_in_pixels.append(p_end)
                 valid_points.append(key_point)
 
-            print(p_in_pixels)
-            print(p_in_pixels)
-            print(p_in_pixels)
-            print(p_in_pixels)
-            print(p_in_pixels)
             p_in_pixels = torch.tensor(p_in_pixels)
             t_in_pixels = torch.tensor(t_in_pixels)
 
