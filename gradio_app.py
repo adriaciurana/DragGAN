@@ -161,6 +161,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             'draw_interval': 5,
             'radius_mask': 51,
+            'projection_steps': 1_000,
 
             'model': drag_gan,
 
@@ -196,6 +197,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     with gr.Row():
                         form_model_url = gr.Textbox(placeholder="Url of the pkl", label="Url")
                         form_model_url_btn = gr.Button("Submit")
+
+                    with gr.Row():
+                        form_project_file = gr.File(label="Image project file")
+                        form_project_iterations = gr.Number(value=global_state.value['projection_steps'], label="Image projection num steps")
 
                     with gr.Row():    
                         form_seed_number = gr.Number(value=default_seed, interactive=True, label="Seed")
@@ -250,6 +255,29 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         def on_change_model_url(url, global_state, seed):
             return init_wrapper_drag_gan(url, global_state, seed)
         form_model_url_btn.click(on_change_model_url, inputs=[form_model_url, global_state, form_seed_number], outputs=[global_state, form_image_draw])   
+
+        def on_change_project_file(image_file, global_state):
+            drag_gan: DragGAN = global_state["model"]
+            num_steps = global_state["projection_steps"]
+            w_latent = drag_gan.project(Image.open(image_file.name), num_steps=num_steps, verbose=True)
+            
+            image_raw = drag_gan.generate(w_latent)
+            global_state['image_orig'] = image_raw.copy()
+            global_state['image_raw'] = image_raw
+            global_state['image_draw'] = image_raw.copy()
+
+            global_state['image_mask'] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
+            global_state['image_mask_draw'] = draw_mask_on_image(global_state['image_raw'], global_state['image_mask'])
+
+            return global_state, global_state['image_draw']
+
+        form_project_file.change(on_change_project_file, inputs=[form_project_file, global_state], outputs=[global_state, form_image_draw])
+
+        def on_project_iterations(form_project_iterations, global_state):
+            global_state["projection_steps"] = form_project_iterations
+            return global_state
+        form_project_iterations.change(on_project_iterations, inputs=[form_project_iterations, global_state], outputs=[global_state]) 
+
 
         def on_change_seed(seed, global_state):
             drag_gan: DragGAN = global_state['model']
