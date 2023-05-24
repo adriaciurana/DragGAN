@@ -252,7 +252,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                         with gr.Tab("Image projection"):
                             with gr.Row():
                                 form_project_file = gr.File(label="Image project file")
-                                form_project_iterations = gr.Number(
+                                form_project_iterations_number = gr.Number(
                                     value=global_state.value["projection_steps"],
                                     label="Image projection num steps",
                                 )
@@ -261,14 +261,14 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
                 with gr.Accordion("Tools"):
                     with gr.Tab("Pair-Points") as points_tab:
-                        form_dropdown_points = gr.Dropdown(
+                        form_points_dropdown = gr.Dropdown(
                             choices=[],
                             value="",
                             interactive=True,
                             label="List of pair-points",
                         )
 
-                        form_type_point = gr.Radio(
+                        form_type_point_radio = gr.Radio(
                             ["start (p)", "target (t)"],
                             value="start (p)",
                             label="Type",
@@ -300,12 +300,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                 form_steps_number = gr.Number(value=0, label="Steps", interactive=False).style(
                                     full_width=False
                                 )
-                                form_draw_interval = gr.Number(
+                                form_draw_interval_number = gr.Number(
                                     value=global_state.value["draw_interval"],
                                     label="Draw Interval (steps)",
                                     interactive=True,
                                 ).style(full_width=False)
-                                form_download_result = gr.File(label="Download result", visible=False).style(
+                                form_download_result_file = gr.File(label="Download result", visible=False).style(
                                     full_width=True
                                 )
 
@@ -326,7 +326,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                     interactive=True,
                                     label="LR",
                                 ).style(full_width=True)
-                                form_magnitude_direction_in_pixels = gr.Number(
+                                form_magnitude_direction_in_pixels_number = gr.Number(
                                     value=global_state.value["params"]["magnitude_direction_in_pixels"],
                                     interactive=True,
                                     label=("Magnitude direction of d vector" " (pixels)"),
@@ -347,7 +347,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Right column
             with gr.Column():
                 form_image_draw = gr.Image(image_draw, elem_classes="image_nonselectable")
-                form_mask_draw = gr.Image(
+                form_mask_draw_image = gr.Image(
                     image_mask_draw,
                     visible=False,
                     elem_classes="image_nonselectable",
@@ -394,9 +394,9 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             outputs=[global_state, form_image_draw],
         )
 
-        form_project_iterations.change(
+        form_project_iterations_number.change(
             partial(on_change_single_global_state, "projection_steps"),
-            inputs=[form_project_iterations, global_state],
+            inputs=[form_project_iterations_number, global_state],
             outputs=[global_state],
         )
 
@@ -447,15 +447,15 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             )
             return global_state, image_draw
 
-        form_dropdown_points.change(
+        form_points_dropdown.change(
             on_change_dropdown_points,
-            inputs=[form_dropdown_points, global_state],
+            inputs=[form_points_dropdown, global_state],
             outputs=[global_state, form_image_draw],
         )
 
-        form_type_point.change(
+        form_type_point_radio.change(
             partial(on_change_single_global_state, "curr_type_point"),
-            inputs=[form_type_point, global_state],
+            inputs=[form_type_point_radio, global_state],
             outputs=[global_state],
         )
 
@@ -487,7 +487,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             outputs=[global_state],
         )
 
-        form_magnitude_direction_in_pixels.change(
+        form_magnitude_direction_in_pixels_number.change(
             partial(
                 on_change_single_global_state,
                 ["params", "magnitude_direction_in_pixels"],
@@ -521,14 +521,16 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             t_in_pixels = []
             valid_points = []
 
+            # Prepare the points for the inference
             if len(global_state["points"]) == 0:
                 image_draw = draw_points_on_image(
                     global_state["image_draw"],
                     global_state["points"],
                     global_state["curr_point"],
                 )
-                return global_state, 0, image_draw, gr.Button.update(visible=False)
+                return global_state, 0, image_draw, gr.File.update(visible=False)
 
+            # Transform the points into torch tensors
             for key_point, point in global_state["points"].items():
                 try:
                     p_start = point.get("start_temp", point["start"])
@@ -554,6 +556,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # M=1 that you want to edit
             # M=0 that you want to preserve
             mask_in_pixels = torch.tensor(global_state["image_mask"]).float()
+
+            # Init the DragGAN
             (
                 w_latent_learn,
                 w_latent_fix,
@@ -578,10 +582,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 motion_lr=global_state["params"]["motion_lr"],
                 optimizer=global_state["restart_params"].get("optimizer", None),
             )
-
             global_state["restart_params"]["stop"] = False
+
+            # Start to iterate
             step_idx = 0
             while True:
+                # Stop the iteration if the user press the button
                 if global_state["restart_params"]["stop"]:
                     break
 
@@ -602,52 +608,61 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     magnitude_direction=magnitude_direction,
                 )
 
-                p_in_pixels = drag_gan.norm_coord_to_pixel_coord(p)
-                t_in_pixels = drag_gan.norm_coord_to_pixel_coord(t)
-
-                for key_point, p_i, t_i in zip(valid_points, p_in_pixels, t_in_pixels):
-                    global_state["points"][key_point]["start_temp"] = p_i.tolist()
-                    global_state["points"][key_point]["target"] = t_i.tolist()
-
-                img_step_pil = drag_gan.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
-                img_step_pil = drag_gan.draw_p_image(img_step_pil, p, t)
-
-                global_state["image_raw"] = img_step_pil
-                image_draw = draw_points_on_image(
-                    img_step_pil,
-                    global_state["points"],
-                    global_state["curr_point"],
-                )
-
                 if step_idx % global_state["draw_interval"] == 0:
-                    yield global_state, step_idx, image_draw, gr.Button.update(visible=False)
+                    # Unnormalize the p and t to create a visualization
+                    p_in_pixels = drag_gan.norm_coord_to_pixel_coord(p)
+                    t_in_pixels = drag_gan.norm_coord_to_pixel_coord(t)
+
+                    # Move points in the global state
+                    for key_point, p_i, t_i in zip(valid_points, p_in_pixels, t_in_pixels):
+                        global_state["points"][key_point]["start_temp"] = p_i.tolist()
+                        global_state["points"][key_point]["target"] = t_i.tolist()
+
+                    # Generate the image
+                    img_step_pil = drag_gan.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
+                    global_state["image_raw"] = img_step_pil
+
+                    # Draw points on the image
+                    image_draw = draw_points_on_image(
+                        img_step_pil,
+                        global_state["points"],
+                        global_state["curr_point"],
+                    )
+
+                    yield global_state, step_idx, image_draw, gr.File.update(visible=False)
+
+                # increate step
                 step_idx += 1
 
-        form_start_btn.click(
-            on_click_start,
-            inputs=[global_state],
-            outputs=[global_state, form_steps_number, form_image_draw, form_download_result],
-        )
-
-        def on_click_stop(global_state):
-            global_state["restart_params"]["stop"] = True
-
+            # Create the output result
             w_latent = global_state["restart_params"]["w_latent"]
             image_result = drag_gan.generate(w_latent)
 
             fp = NamedTemporaryFile(suffix=".png", delete=False)
             image_result.save(fp, "PNG")
-            return global_state, gr.File.update(visible=True, value=fp.name)
 
-        form_stop_btn.click(on_click_stop, inputs=[global_state], outputs=[global_state, form_download_result])
+            yield global_state, step_idx, image_draw, gr.File.update(visible=True, value=fp.name)
 
-        form_draw_interval.change(
+        form_start_btn.click(
+            on_click_start,
+            inputs=[global_state],
+            outputs=[global_state, form_steps_number, form_image_draw, form_download_result_file],
+        )
+
+        def on_click_stop(global_state):
+            global_state["restart_params"]["stop"] = True
+
+            return global_state
+
+        form_stop_btn.click(on_click_stop, inputs=[global_state], outputs=[global_state])
+
+        form_draw_interval_number.change(
             partial(
                 on_change_single_global_state,
                 "draw_interval",
                 map_transform=lambda x: int(x),
             ),
-            inputs=[form_draw_interval, global_state],
+            inputs=[form_draw_interval_number, global_state],
             outputs=[global_state],
         )
 
@@ -673,7 +688,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_add_point_btn.click(
             on_click_add_point,
             inputs=[global_state],
-            outputs=[form_dropdown_points, global_state],
+            outputs=[form_points_dropdown, global_state],
         )
 
         def on_click_remove_point(global_state):
@@ -690,7 +705,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_remove_point_btn.click(
             on_click_remove_point,
             inputs=[global_state],
-            outputs=[form_dropdown_points, global_state],
+            outputs=[form_points_dropdown, global_state],
         )
 
         # Mask
@@ -708,7 +723,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_reset_mask_btn.click(
             on_click_reset_mask,
             inputs=[global_state],
-            outputs=[global_state, form_mask_draw],
+            outputs=[global_state, form_mask_draw_image],
         )
 
         form_radius_mask_number.change(
@@ -733,7 +748,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         points_tab.select(
             on_click_points_tab,
             inputs=[global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         def on_click_mask_tab(global_state):
@@ -747,7 +762,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         mask_tab.select(
             on_click_mask_tab,
             inputs=[global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         def on_click_image(global_state, evt: gr.SelectData):
@@ -794,10 +809,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             return global_state, image_mask_draw
 
-        form_mask_draw.select(
+        form_mask_draw_image.select(
             on_click_mask,
             inputs=[global_state],
-            outputs=[global_state, form_mask_draw],
+            outputs=[global_state, form_mask_draw_image],
         )
 
     return app
