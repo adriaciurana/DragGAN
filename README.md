@@ -21,7 +21,7 @@ You can install the requirements using the following command:
 pip install -r requirements.txt
 ```
 
-I suggest you install pytorch separately with the CUDA version you need.
+I suggest to install pytorch separately with the CUDA version that you need.
 
 # Implementation
 In the file drag_gan.py you will find the entire implementation of the paper. The implementation is efficient (only uses pytorch).
