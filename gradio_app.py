@@ -1,12 +1,13 @@
-import cv2
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-import torch
-import gradio as gr
-from drag_gan import DragGAN
-from pathlib import Path
-from threading import Thread
 from functools import partial
+from pathlib import Path
+
+import cv2
+import gradio as gr
+import numpy as np
+import torch
+from PIL import Image, ImageDraw, ImageFont
+
+from drag_gan import DragGAN
 
 
 def init_drag_gan(network_pkl, device, seed):
@@ -24,12 +25,8 @@ def init_wrapper_drag_gan(ref, global_state, seed):
     global_state["image_raw"] = image_raw
     global_state["image_draw"] = image_raw.copy()
 
-    global_state["image_mask"] = np.ones(
-        (image_raw.size[1], image_raw.size[0]), dtype=np.uint8
-    )
-    global_state["image_mask_draw"] = draw_mask_on_image(
-        global_state["image_raw"], global_state["image_mask"]
-    )
+    global_state["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
+    global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
 
     del global_state["restart_params"]
     global_state["restart_params"] = {}
@@ -84,9 +81,7 @@ def draw_points_on_image(image, points, curr_point=None):
             )
 
             if curr_point is not None and curr_point == point_key:
-                overlay_draw.text(
-                    p_draw, "p", font=font, align="center", fill=(0, 0, 0)
-                )
+                overlay_draw.text(p_draw, "p", font=font, align="center", fill=(0, 0, 0))
 
         if p_target is not None:
             t_draw = int(p_target[0]), int(p_target[1])
@@ -101,9 +96,7 @@ def draw_points_on_image(image, points, curr_point=None):
             )
 
             if curr_point is not None and curr_point == point_key:
-                overlay_draw.text(
-                    t_draw, "t", font=font, align="center", fill=(0, 0, 0)
-                )
+                overlay_draw.text(t_draw, "t", font=font, align="center", fill=(0, 0, 0))
 
     return Image.alpha_composite(image.convert("RGBA"), overlay_rgba).convert("RGB")
 
@@ -167,7 +160,7 @@ def main(
 
 ### Mask
 1. Select the "Mask" tab.
-2. Once selected, you will be able to draw subtractively. The default mask is the entire image that can be edited. 
+2. Once selected, you will be able to draw subtractively. The default mask is the entire image that can be edited.
 3. By drawing you can indicate areas that you want not to be edited.
 
 ### Run
@@ -184,9 +177,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
     """
 
     with gr.Blocks(css=css) as app:
-        drag_gan, w_latent, image_orig = init_drag_gan(
-            network_pkl, device, default_seed
-        )
+        drag_gan, w_latent, image_orig = init_drag_gan(network_pkl, device, default_seed)
 
         global_state = gr.State(
             {
@@ -204,9 +195,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 "device": device,
                 "image_orig": image_orig.copy(),
                 "image_raw": image_orig,
-                "image_mask": np.ones(
-                    (image_orig.size[1], image_orig.size[0]), dtype=np.uint8
-                ),
+                "image_mask": np.ones((image_orig.size[1], image_orig.size[0]), dtype=np.uint8),
                 "draw_interval": 5,
                 "radius_mask": 51,
                 "projection_steps": 1_000,
@@ -225,9 +214,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
         global_state.value["image_draw"] = image_draw
 
-        image_mask_draw = draw_mask_on_image(
-            global_state.value["image_raw"], global_state.value["image_mask"]
-        )
+        image_mask_draw = draw_mask_on_image(global_state.value["image_raw"], global_state.value["image_mask"])
         global_state.value["image_mask_draw"] = image_draw
 
         with gr.Row():
@@ -240,26 +227,36 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                         gr.Markdown(about_paper)
 
                 with gr.Accordion("Network & latent"):
-                    form_model_pickle_file = gr.File(label="Pickle file")
+                    with gr.Row():
+                        with gr.Tab("Local file"):
+                            form_model_pickle_file = gr.File(label="Pickle file")
+
+                        with gr.Tab("URL"):
+                            with gr.Row():
+                                form_model_url = gr.Textbox(
+                                    placeholder="Url of the pickle file",
+                                    label="URL",
+                                )
+                                form_model_url_btn = gr.Button("Submit")
 
                     with gr.Row():
-                        form_model_url = gr.Textbox(
-                            placeholder="Url of the pkl", label="Url"
-                        )
-                        form_model_url_btn = gr.Button("Submit")
+                        with gr.Tab("Image seed"):
+                            with gr.Row():
+                                form_seed_number = gr.Number(
+                                    value=default_seed,
+                                    interactive=True,
+                                    label="Seed",
+                                )
 
-                    with gr.Row():
-                        form_project_file = gr.File(label="Image project file")
-                        form_project_iterations = gr.Number(
-                            value=global_state.value["projection_steps"],
-                            label="Image projection num steps",
-                        )
+                        with gr.Tab("Image projection"):
+                            with gr.Row():
+                                form_project_file = gr.File(label="Image project file")
+                                form_project_iterations = gr.Number(
+                                    value=global_state.value["projection_steps"],
+                                    label="Image projection num steps",
+                                )
 
-                    with gr.Row():
-                        form_seed_number = gr.Number(
-                            value=default_seed, interactive=True, label="Seed"
-                        )
-                        form_reset_image = gr.Button("Reset image")
+                    form_reset_image = gr.Button("Reset image")
 
                 with gr.Accordion("Tools"):
                     with gr.Tab("Pair-Points") as points_tab:
@@ -271,16 +268,14 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                         )
 
                         form_type_point = gr.Radio(
-                            ["start (p)", "target (t)"], value="start (p)", label="Type"
+                            ["start (p)", "target (t)"],
+                            value="start (p)",
+                            label="Type",
                         )
 
                         with gr.Row():
-                            form_add_point_btn = gr.Button("Add pair-point").style(
-                                full_width=True
-                            )
-                            form_remove_point_btn = gr.Button(
-                                "Remove pair-point"
-                            ).style(full_width=True)
+                            form_add_point_btn = gr.Button("Add pair-point").style(full_width=True)
+                            form_remove_point_btn = gr.Button("Remove pair-point").style(full_width=True)
 
                     with gr.Tab("Mask (subtractive mask)") as mask_tab:
                         gr.Markdown(
@@ -289,9 +284,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                             Transparent zone = not editable by DragGAN.
                         """
                         )
-                        form_reset_mask_btn = gr.Button("Reset mask").style(
-                            full_width=True
-                        )
+                        form_reset_mask_btn = gr.Button("Reset mask").style(full_width=True)
                         form_radius_mask_number = gr.Number(
                             value=global_state.value["radius_mask"],
                             interactive=True,
@@ -299,60 +292,61 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                         ).style(full_width=False)
 
                     with gr.Row():
-                        form_start_btn = gr.Button("Start").style(full_width=True)
-                        form_stop_btn = gr.Button("Stop").style(full_width=True)
-                        form_steps_number = gr.Number(
-                            value=0, label="Steps", interactive=False
-                        ).style(full_width=False)
-                        form_draw_interval = gr.Number(
-                            value=global_state.value["draw_interval"],
-                            label="Draw Interval (steps)",
-                            interactive=True,
-                        ).style(full_width=False)
+                        with gr.Tab("Run"):
+                            with gr.Row():
+                                form_start_btn = gr.Button("Start").style(full_width=True)
+                                form_stop_btn = gr.Button("Stop").style(full_width=True)
+                                form_steps_number = gr.Number(value=0, label="Steps", interactive=False).style(
+                                    full_width=False
+                                )
+                                form_draw_interval = gr.Number(
+                                    value=global_state.value["draw_interval"],
+                                    label="Draw Interval (steps)",
+                                    interactive=True,
+                                ).style(full_width=False)
 
-                    with gr.Row():
-                        form_lambda_number = gr.Number(
-                            value=global_state.value["params"]["motion_lambda"],
-                            interactive=True,
-                            label="Lambda",
-                        ).style(full_width=True)
-                        form_trainable_w_dims_number = gr.Number(
-                            value=global_state.value["params"]["trainable_w_dims"],
-                            interactive=True,
-                            label="Trainable W latent dims",
-                        ).style(full_width=True)
-                        form_motion_lr_number = gr.Number(
-                            value=global_state.value["params"]["motion_lr"],
-                            interactive=True,
-                            label="LR",
-                        ).style(full_width=True)
-                        form_magnitude_direction_in_pixels = gr.Number(
-                            value=global_state.value["params"][
-                                "magnitude_direction_in_pixels"
-                            ],
-                            interactive=True,
-                            label="Magnitude direction of d vector (pixels)",
-                        ).style(full_width=True)
+                        with gr.Tab("Hyperparameters"):
+                            with gr.Row():
+                                form_lambda_number = gr.Number(
+                                    value=global_state.value["params"]["motion_lambda"],
+                                    interactive=True,
+                                    label="Lambda",
+                                ).style(full_width=True)
+                                form_trainable_w_dims_number = gr.Number(
+                                    value=global_state.value["params"]["trainable_w_dims"],
+                                    interactive=True,
+                                    label="Trainable W latent dims",
+                                ).style(full_width=True)
+                                form_motion_lr_number = gr.Number(
+                                    value=global_state.value["params"]["motion_lr"],
+                                    interactive=True,
+                                    label="LR",
+                                ).style(full_width=True)
+                                form_magnitude_direction_in_pixels = gr.Number(
+                                    value=global_state.value["params"]["magnitude_direction_in_pixels"],
+                                    interactive=True,
+                                    label=("Magnitude direction of d vector" " (pixels)"),
+                                ).style(full_width=True)
 
-                    with gr.Row():
-                        form_r1_in_pixels_number = gr.Number(
-                            value=global_state.value["params"]["r1_in_pixels"],
-                            interactive=True,
-                            label="R1 (pixels)",
-                        ).style(full_width=False)
-                        form_r2_in_pixels_number = gr.Number(
-                            value=global_state.value["params"]["r2_in_pixels"],
-                            interactive=True,
-                            label="R2 (pixels)",
-                        ).style(full_width=False)
+                            with gr.Row():
+                                form_r1_in_pixels_number = gr.Number(
+                                    value=global_state.value["params"]["r1_in_pixels"],
+                                    interactive=True,
+                                    label="R1 (pixels)",
+                                ).style(full_width=False)
+                                form_r2_in_pixels_number = gr.Number(
+                                    value=global_state.value["params"]["r2_in_pixels"],
+                                    interactive=True,
+                                    label="R2 (pixels)",
+                                ).style(full_width=False)
 
             # Right column
             with gr.Column():
-                form_image_draw = gr.Image(
-                    image_draw, elem_classes="image_nonselectable"
-                )
+                form_image_draw = gr.Image(image_draw, elem_classes="image_nonselectable")
                 form_mask_draw = gr.Image(
-                    image_mask_draw, visible=False, elem_classes="image_nonselectable"
+                    image_mask_draw,
+                    visible=False,
+                    elem_classes="image_nonselectable",
                 )
                 gr.Markdown("Credits: Adrià Ciurana Lanau | info@dreamlearning.ai")
 
@@ -378,21 +372,15 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         def on_change_project_file(image_file, global_state):
             drag_gan: DragGAN = global_state["model"]
             num_steps = global_state["projection_steps"]
-            w_latent = drag_gan.project(
-                Image.open(image_file.name), num_steps=num_steps, verbose=True
-            )
+            w_latent = drag_gan.project(Image.open(image_file.name), num_steps=num_steps, verbose=True)
 
             image_raw = drag_gan.generate(w_latent)
             global_state["image_orig"] = image_raw.copy()
             global_state["image_raw"] = image_raw
             global_state["image_draw"] = image_raw.copy()
 
-            global_state["image_mask"] = np.ones(
-                (image_raw.size[1], image_raw.size[0]), dtype=np.uint8
-            )
-            global_state["image_mask_draw"] = draw_mask_on_image(
-                global_state["image_raw"], global_state["image_mask"]
-            )
+            global_state["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
+            global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
 
             return global_state, global_state["image_draw"]
 
@@ -417,12 +405,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             global_state["image_raw"] = image_raw
             global_state["image_draw"] = image_raw.copy()
 
-            global_state["image_mask"] = np.ones(
-                (image_raw.size[1], image_raw.size[0]), dtype=np.uint8
-            )
-            global_state["image_mask_draw"] = draw_mask_on_image(
-                global_state["image_raw"], global_state["image_mask"]
-            )
+            global_state["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
+            global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
 
             del global_state["restart_params"]
             global_state["restart_params"] = {}
@@ -531,7 +515,6 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         def on_click_start(global_state):
             p_in_pixels = []
             t_in_pixels = []
-
             valid_points = []
 
             if len(global_state["points"]) == 0:
@@ -547,22 +530,26 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     p_start = point.get("start_temp", point["start"])
                     p_end = point["target"]
 
-                    p_in_pixels.append(p_start)
-                    t_in_pixels.append(p_end)
-                    valid_points.append(key_point)
+                    if p_start is None or p_end is None:
+                        continue
 
                 except KeyError:
                     continue
+                
+                p_in_pixels.append(p_start)
+                t_in_pixels.append(p_end)
+                valid_points.append(key_point)
 
+            print(p_in_pixels)
+            print(p_in_pixels)
+            print(p_in_pixels)
+            print(p_in_pixels)
+            print(p_in_pixels)
             p_in_pixels = torch.tensor(p_in_pixels)
             t_in_pixels = torch.tensor(t_in_pixels)
 
-            r1_in_pixels = torch.tensor(
-                [global_state["params"]["r1_in_pixels"]]
-            ).float()
-            r2_in_pixels = torch.tensor(
-                [global_state["params"]["r2_in_pixels"]]
-            ).float()
+            r1_in_pixels = torch.tensor([global_state["params"]["r1_in_pixels"]]).float()
+            r2_in_pixels = torch.tensor([global_state["params"]["r2_in_pixels"]]).float()
 
             # Mask for the paper:
             # M=1 that you want to edit
@@ -587,9 +574,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 r1_in_pixels=r1_in_pixels,
                 r2_in_pixels=r2_in_pixels,
                 t_in_pixels=t_in_pixels,
-                magnitude_direction_in_pixels=global_state["params"][
-                    "magnitude_direction_in_pixels"
-                ],
+                magnitude_direction_in_pixels=global_state["params"]["magnitude_direction_in_pixels"],
                 mask_in_pixels=mask_in_pixels,
                 motion_lr=global_state["params"]["motion_lr"],
                 optimizer=global_state["restart_params"].get("optimizer", None),
@@ -625,14 +610,14 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     global_state["points"][key_point]["start_temp"] = p_i.tolist()
                     global_state["points"][key_point]["target"] = t_i.tolist()
 
-                img_step_pil = drag_gan.generate_image_from_split_w_latent(
-                    w_latent_learn, w_latent_fix
-                )
+                img_step_pil = drag_gan.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
                 img_step_pil = drag_gan.draw_p_image(img_step_pil, p, t)
 
                 global_state["image_raw"] = img_step_pil
                 image_draw = draw_points_on_image(
-                    img_step_pil, global_state["points"], global_state["curr_point"]
+                    img_step_pil,
+                    global_state["points"],
+                    global_state["curr_point"],
                 )
 
                 if step_idx % global_state["draw_interval"] == 0:
@@ -649,12 +634,14 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             global_state["restart_params"]["stop"] = True
             return global_state
 
-        form_stop_btn.click(
-            on_click_stop, inputs=[global_state], outputs=[global_state]
-        )
+        form_stop_btn.click(on_click_stop, inputs=[global_state], outputs=[global_state])
 
         form_draw_interval.change(
-            partial(on_change_single_global_state, "draw_interval", map_transform=lambda x: int(x)),
+            partial(
+                on_change_single_global_state,
+                "draw_interval",
+                map_transform=lambda x: int(x),
+            ),
             inputs=[form_draw_interval, global_state],
             outputs=[global_state],
         )
@@ -673,7 +660,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             global_state["curr_point"] = max_choice
             global_state["points"][max_choice] = {"start": None, "target": None}
             choices = choices + [max_choice]
-            return gr.Dropdown.update(choices=choices, value=max_choice), global_state
+            return (
+                gr.Dropdown.update(choices=choices, value=max_choice),
+                global_state,
+            )
 
         form_add_point_btn.click(
             on_click_add_point,
@@ -687,7 +677,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             choices = list(global_state["points"].keys())
             global_state["curr_point"] = choices[0]
-            return gr.Dropdown.update(choices=choices, value=choices[0]), global_state
+            return (
+                gr.Dropdown.update(choices=choices, value=choices[0]),
+                global_state,
+            )
 
         form_remove_point_btn.click(
             on_click_remove_point,
@@ -698,12 +691,13 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         # Mask
         def on_click_reset_mask(global_state):
             global_state["image_mask"] = np.ones(
-                (global_state["image_raw"].size[1], global_state["image_raw"].size[0]),
+                (
+                    global_state["image_raw"].size[1],
+                    global_state["image_raw"].size[0],
+                ),
                 dtype=np.uint8,
             )
-            global_state["image_mask_draw"] = draw_mask_on_image(
-                global_state["image_raw"], global_state["image_mask"]
-            )
+            global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
             return global_state, global_state["image_mask_draw"]
 
         form_reset_mask_btn.click(
@@ -713,7 +707,11 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
 
         form_radius_mask_number.change(
-            partial(on_change_single_global_state, "radius_mask", map_transform=lambda x: int(x)),
+            partial(
+                on_change_single_global_state,
+                "radius_mask",
+                map_transform=lambda x: int(x),
+            ),
             inputs=[form_radius_mask_number, global_state],
             outputs=[global_state],
         )
@@ -792,7 +790,9 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             return global_state, image_mask_draw
 
         form_mask_draw.select(
-            on_click_mask, inputs=[global_state], outputs=[global_state, form_mask_draw]
+            on_click_mask,
+            inputs=[global_state],
+            outputs=[global_state, form_mask_draw],
         )
 
     return app

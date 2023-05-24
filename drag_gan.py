@@ -1,26 +1,24 @@
-import cv2
-from PIL import Image
-import torch
-from torch import nn
-from torch import optim
-import numpy as np
-from qqdm import qqdm
-from typing import Optional, Iterable, Literal, Union, Callable
+import sys
+import warnings
 from functools import partial
+from os.path import exists
+from pathlib import Path
+from typing import Callable, Optional, Union
+from urllib.parse import urlparse
+
+import cv2
+import numpy as np
+import torch
+from PIL import Image
+from qqdm import qqdm
+from torch import nn, optim
 from torch.nn import functional as Functional
 
-import sys
-from pathlib import Path
-
 CURR_PATH = Path(__file__).parent
-sys.path.append(str((CURR_PATH / "stylegan2-ada-pytorch").absolute()))
-import dnnlib
-import legacy
-from projector import project
-import warnings
-
-from urllib.parse import urlparse
-from os.path import exists
+sys.path.append(str((CURR_PATH / "stylegan2-ada-pytorch").absolute()))  # noqa
+import dnnlib  # noqa
+import legacy  # noqa
+from projector import project  # noqa
 
 
 def is_local(url):
@@ -77,9 +75,7 @@ def generate_motion_samples(
     return q_samples
 
 
-def generate_motion_direction(
-    p: torch.Tensor, t: torch.Tensor, magnitude_direction: float = 0.1
-) -> torch.Tensor:
+def generate_motion_direction(p: torch.Tensor, t: torch.Tensor, magnitude_direction: float = 0.1) -> torch.Tensor:
     dir_pt = magnitude_direction * Functional.normalize(t - p, dim=-1)
     return dir_pt[:, None, None, :]
 
@@ -87,9 +83,7 @@ def generate_motion_direction(
 def generate_motion_masks(mask_in_pixels, output_size=256, dims=128) -> torch.Tensor:
     return (
         torch.nn.functional.interpolate(
-            mask_in_pixels.reshape(
-                1, 1, mask_in_pixels.shape[0], mask_in_pixels.shape[1]
-            ).float(),
+            mask_in_pixels.reshape(1, 1, mask_in_pixels.shape[0], mask_in_pixels.shape[1]).float(),
             size=[output_size, output_size],
             mode="nearest",
         )
@@ -105,12 +99,8 @@ def draw_p_image(img_pil: Image, p: torch.Tensor, t: torch.Tensor, input_size: i
         t_i_pixels = (t_i + 1) / 2.0 * input_size
 
         rad_draw = int(input_size * 0.02)
-        cv2.circle(
-            img_cv, (int(p_i_pixels[0]), int(p_i_pixels[1])), rad_draw, (255, 0, 0), -1
-        )
-        cv2.circle(
-            img_cv, (int(t_i_pixels[0]), int(t_i_pixels[1])), rad_draw, (0, 0, 255), -1
-        )
+        cv2.circle(img_cv, (int(p_i_pixels[0]), int(p_i_pixels[1])), rad_draw, (255, 0, 0), -1)
+        cv2.circle(img_cv, (int(t_i_pixels[0]), int(t_i_pixels[1])), rad_draw, (0, 0, 255), -1)
     return Image.fromarray(img_cv)
 
 
@@ -118,9 +108,7 @@ class DragGAN:
     def __init__(
         self,
         network_pkl: str,
-        features_extractor_layer: Callable[
-            [nn.Module], nn.Module
-        ] = lambda G: G.synthesis.b256,
+        features_extractor_layer: Callable[[nn.Module], nn.Module] = lambda G: G.synthesis.b256,
         features_extractor_size: int = 256,
         features_extractor_dims: int = 128,
         device: Union[torch.device, str] = torch.device("cuda:0"),
@@ -151,20 +139,16 @@ class DragGAN:
     def radius2norm(self, r: torch.Tensor):
         return fix_radius(r, self._input_size)
 
-    def _get_F(
-        self, w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor
-    ) -> torch.Tensor:
+    def _get_F(self, w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor) -> torch.Tensor:
         def forward_layer_hook(F_arr, module, input, output):
             F_arr[0] = output[0]
 
         F_arr = [None]
-        self._features_extractor_layer(self._G).register_forward_hook(
-            partial(forward_layer_hook, F_arr)
-        )
+        self._features_extractor_layer(self._G).register_forward_hook(partial(forward_layer_hook, F_arr))
 
         # Features
         w_latent = torch.cat((w_latent_learn, w_latent_fix), dim=1)
-        with warnings.catch_warnings(record=True) as warning:
+        with warnings.catch_warnings(record=True):
             warnings.simplefilter("ignore")
             _ = self._G.synthesis(w_latent, noise_mode="const")
 
@@ -173,24 +157,16 @@ class DragGAN:
 
         return F_arr[0]
 
-    def get_w_latent_from_seed(
-        self, seed: int, truncation_psi: int = 0.85
-    ) -> torch.Tensor:
+    def get_w_latent_from_seed(self, seed: int, truncation_psi: int = 0.85) -> torch.Tensor:
         # Compute first mapping
         with torch.no_grad():
-            z = torch.from_numpy(
-                np.random.RandomState(seed).randn(1, self._G.z_dim)
-            ).to(self._device)
+            z = torch.from_numpy(np.random.RandomState(seed).randn(1, self._G.z_dim)).to(self._device)
             c = torch.zeros([1, self._G.c_dim], device=self._device)
 
-            with warnings.catch_warnings(record=True) as warning:
+            with warnings.catch_warnings(record=True):
                 warnings.simplefilter("ignore")
                 w_latent_orig = (
-                    self._G.mapping(
-                        z, c, truncation_psi=truncation_psi, truncation_cutoff=None
-                    )
-                    .detach()
-                    .clone()
+                    self._G.mapping(z, c, truncation_psi=truncation_psi, truncation_cutoff=None).detach().clone()
                 )
 
         return w_latent_orig
@@ -213,9 +189,7 @@ class DragGAN:
     ):
         # Generate masks
         qr1_samples = generate_motion_samples(p, r1, samples=r1_interpolation_samples)
-        qr1d_samples = qr1_samples + generate_motion_direction(
-            p, t, magnitude_direction=magnitude_direction
-        )
+        qr1d_samples = qr1_samples + generate_motion_direction(p, t, magnitude_direction=magnitude_direction)
 
         # Start training
         for step_idx in range(steps):
@@ -285,9 +259,7 @@ class DragGAN:
 
         # F(q)
         # Use grid_sample to extract the features for q, where q € neighbours(p, r2)
-        Fq = torch.nn.functional.grid_sample(
-            F_exp.float(), qr2_samples.float(), mode="bilinear", align_corners=False
-        )
+        Fq = torch.nn.functional.grid_sample(F_exp.float(), qr2_samples.float(), mode="bilinear", align_corners=False)
 
         # Compute pairwise distances between fi and F(q).
         distances = cdist_p_norm(f_i, Fq, p=distance_l_type)
@@ -313,9 +285,7 @@ class DragGAN:
 
         return new_p
 
-    def generate_image_from_split_w_latent(
-        self, w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor
-    ) -> Image:
+    def generate_image_from_split_w_latent(self, w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor) -> Image:
         w_latent = torch.cat((w_latent_learn, w_latent_fix), dim=1)
         return self.generate(w_latent)
 
@@ -324,14 +294,10 @@ class DragGAN:
 
     def generate(self, w_latent: torch.Tensor) -> Image:
         with torch.no_grad():
-            with warnings.catch_warnings(record=True) as warning:
+            with warnings.catch_warnings(record=True):
                 warnings.simplefilter("ignore")
                 img = self._G.synthesis(w_latent, noise_mode="const")
-                img = (
-                    (img.permute(0, 2, 3, 1) * 127.5 + 128)
-                    .clamp(0, 255)
-                    .to(torch.uint8)
-                )
+                img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
                 img = Image.fromarray(img[0].cpu().numpy(), "RGB")
 
         return img
@@ -341,16 +307,12 @@ class DragGAN:
         target_pil = img.convert("RGB")
         w, h = target_pil.size
         s = min(w, h)
-        target_pil = target_pil.crop(
-            ((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2)
-        )
-        target_pil = target_pil.resize(
-            (self._G.img_resolution, self._G.img_resolution), Image.LANCZOS
-        )
+        target_pil = target_pil.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2))
+        target_pil = target_pil.resize((self._G.img_resolution, self._G.img_resolution), Image.LANCZOS)
         target_uint8 = np.array(target_pil, dtype=np.uint8)
         target = torch.tensor(target_uint8.transpose([2, 0, 1]), device=self._device)
 
-        with warnings.catch_warnings(record=True) as warning:
+        with warnings.catch_warnings(record=True):
             warnings.simplefilter("ignore")
             projected_w_steps = project(
                 G=self._G,
@@ -392,9 +354,7 @@ class DragGAN:
         r1 = fix_radius(r1_in_pixels, self._input_size)
         r2 = fix_radius(r2_in_pixels, self._input_size)
         t = fix_point(t_in_pixels, self._input_size)
-        magnitude_direction = fix_radius(
-            magnitude_direction_in_pixels, self._input_size
-        )
+        magnitude_direction = fix_radius(magnitude_direction_in_pixels, self._input_size)
 
         # Create the preservation mask
         if mask_in_pixels is not None:
@@ -527,9 +487,7 @@ class DragGAN:
         if debug_draw_original_image:
             debug_folder_path.mkdir(parents=True, exist_ok=True)
 
-            img_orig_pil = self.generate_image_from_split_w_latent(
-                w_latent_learn, w_latent_fix
-            )
+            img_orig_pil = self.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
             img_orig_pil = draw_p_image(img_orig_pil, p, t, self._input_size)
             img_orig_pil.save(debug_folder_path / "init.png")
 
@@ -554,15 +512,10 @@ class DragGAN:
                 pbar=pbar,
             )
 
-            if (
-                not isinstance(debug_draw_step_image, bool)
-                and global_step % debug_draw_step_image == 0
-            ):
+            if not isinstance(debug_draw_step_image, bool) and global_step % debug_draw_step_image == 0:
                 debug_folder_path.mkdir(parents=True, exist_ok=True)
 
-                img_step_pil = self.generate_image_from_split_w_latent(
-                    w_latent_learn, w_latent_fix
-                )
+                img_step_pil = self.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
                 img_step_pil = draw_p_image(img_step_pil, p, t, self._input_size)
                 img_step_pil.save(debug_folder_path / f"step_{global_step:04d}.png")
 
@@ -570,9 +523,7 @@ class DragGAN:
 
         # Return the results
         if return_image:
-            img_final_pil = self.generate_image_from_split_w_latent(
-                w_latent_learn, w_latent_fix
-            )
+            img_final_pil = self.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
             return w_latent, img_final_pil
 
         return w_latent

@@ -1,0 +1,7 @@
+[flake8]
+exclude =
+    stylegan2-ada-pytorch
+    env
+    .env
+    old
+max-line-length = 120
