@@ -21,7 +21,7 @@ import legacy  # noqa
 from projector import project  # noqa
 
 
-def is_local(url):
+def is_local(url: str) -> bool:
     url_parsed = urlparse(url)
     if url_parsed.scheme in ("file", ""):  # Possibly a local file
         return exists(url_parsed.path)
@@ -68,7 +68,7 @@ def generate_motion_direction(p: torch.Tensor, t: torch.Tensor, magnitude_direct
     return dir_pt[:, None, None, :]
 
 
-def generate_motion_masks(mask_in_pixels, output_size=256, dims=128) -> torch.Tensor:
+def generate_motion_masks(mask_in_pixels, output_size: int = 256, dims: int = 128) -> torch.Tensor:
     return (
         torch.nn.functional.interpolate(
             mask_in_pixels.reshape(1, 1, mask_in_pixels.shape[0], mask_in_pixels.shape[1]).float(),
@@ -281,9 +281,6 @@ class DragGAN:
     def generate_image_from_split_w_latent(self, w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor) -> Image:
         w_latent = torch.cat((w_latent_learn, w_latent_fix), dim=1)
         return self.generate(w_latent)
-
-    def draw_p_image(self, img_pil: Image, p: torch.Tensor, t: torch.Tensor):
-        return draw_p_image(img_pil, p, t, self._input_size)
 
     def generate(self, w_latent: torch.Tensor) -> Image:
         with torch.no_grad():
