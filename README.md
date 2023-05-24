@@ -27,6 +27,8 @@ Additionally, a GUI has been created to be able to apply the paper to images.
 python gradio_app.py
 ```
 
+Or use the following colab: :sparkles: https://colab.research.google.com/github/adriaciurana/DragGAN/blob/master/colab_notebook.ipynb
+
 # Citation
 ```
 @inproceedings{pan2023draggan,
