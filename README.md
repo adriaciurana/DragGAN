@@ -1,4 +1,7 @@
 # Unofficial implementation of the paper "Drag Your GAN: Interactive Point based Manipulation on the Generative Image Manifold"
+
+[:sparkles: Try on Colab!](https://colab.research.google.com/github/adriaciurana/DragGAN/blob/master/colab_notebook.ipynb) 
+
 ### [[Official repository]](https://github.com/XingangPan/DragGAN) Drag Your GAN: Interactive Point-based Manipulation on the Generative Image Manifold
 > Xingang Pan, Ayush Tewari, Thomas Leimkühler, Lingjie Liu, Abhimitra Meka, Christian Theobalt<br>
 > *SIGGRAPH 2023 Conference Proceedings*
@@ -35,8 +38,6 @@ Additionally, a GUI has been created to be able to apply the paper to images.
 ```
 python gradio_app.py
 ```
-
-Or use the following colab: [:sparkles: Try on Colab!](https://colab.research.google.com/github/adriaciurana/DragGAN/blob/master/colab_notebook.ipynb) 
 
 # Citation
 ```
