@@ -1,12 +1,12 @@
 from functools import partial
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import cv2
 import gradio as gr
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
-from tempfile import NamedTemporaryFile
 
 from drag_gan import DragGAN
 
@@ -305,7 +305,9 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                     label="Draw Interval (steps)",
                                     interactive=True,
                                 ).style(full_width=False)
-                                form_download_result = gr.File(label="Download result", visible=False).style(full_width=True)
+                                form_download_result = gr.File(label="Download result", visible=False).style(
+                                    full_width=True
+                                )
 
                         with gr.Tab("Hyperparameters"):
                             with gr.Row():
@@ -537,7 +539,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
                 except KeyError:
                     continue
-                
+
                 p_in_pixels.append(p_start)
                 t_in_pixels.append(p_end)
                 valid_points.append(key_point)
@@ -600,8 +602,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     magnitude_direction=magnitude_direction,
                 )
 
-                p_in_pixels = drag_gan.norm2pixel(p)
-                t_in_pixels = drag_gan.norm2pixel(t)
+                p_in_pixels = drag_gan.norm_coord_to_pixel_coord(p)
+                t_in_pixels = drag_gan.norm_coord_to_pixel_coord(t)
 
                 for key_point, p_i, t_i in zip(valid_points, p_in_pixels, t_in_pixels):
                     global_state["points"][key_point]["start_temp"] = p_i.tolist()
@@ -632,7 +634,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             w_latent = global_state["restart_params"]["w_latent"]
             image_result = drag_gan.generate(w_latent)
-            
+
             fp = NamedTemporaryFile(suffix=".png", delete=False)
             image_result.save(fp, "PNG")
             return global_state, gr.File.update(visible=True, value=fp.name)

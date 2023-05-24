@@ -28,18 +28,6 @@ def is_local(url):
     return False
 
 
-def fix_point(p: torch.Tensor, input_size: int) -> torch.Tensor:
-    scale_factor = 2.0 / input_size
-    p_fix = p * scale_factor - 1
-    return p_fix
-
-
-def fix_radius(r: torch.Tensor, input_size: int) -> torch.Tensor:
-    scale_factor = 2.0 / input_size
-    r_fix = r * scale_factor
-    return r_fix
-
-
 def cdist_p_norm(x: torch.Tensor, y: torch.Tensor, p: int = 1) -> torch.Tensor:
     x = x.reshape(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
     y = y.reshape(y.shape[0], y.shape[1], -1).permute(0, 2, 1)
@@ -128,16 +116,21 @@ class DragGAN:
         self._features_extractor_dims = features_extractor_dims
         self._device = device
 
-    def pixel2norm(self, p: torch.Tensor):
-        return fix_point(p, self._input_size)
+    def pixel_coord_to_norm_coord(self, p: torch.Tensor):
+        return self.pixel_value_to_norm_value(p) - 1
 
-    def norm2pixel(self, p: torch.Tensor):
+    def norm_coord_to_pixel_coord(self, p: torch.Tensor):
+        return self.norm_value_to_pixel_value(p + 1)
+
+    def pixel_value_to_norm_value(self, r: torch.Tensor):
+        scale_factor = 2.0 / self._input_size
+        r_fix = r * scale_factor
+        return r_fix
+
+    def norm_value_to_pixel_value(self, r: torch.Tensor):
         scale_factor = self._input_size / 2.0
-        p_fix = (p + 1) * scale_factor
-        return p_fix
-
-    def radius2norm(self, r: torch.Tensor):
-        return fix_radius(r, self._input_size)
+        r_fix = r * scale_factor
+        return r_fix
 
     def _get_F(self, w_latent_learn: torch.Tensor, w_latent_fix: torch.Tensor) -> torch.Tensor:
         def forward_layer_hook(F_arr, module, input, output):
@@ -350,11 +343,11 @@ class DragGAN:
         t_in_pixels = t_in_pixels.to(self._device)
 
         # Convert into normalized -1 to 1 coordinates
-        p = fix_point(p_in_pixels, self._input_size)
-        r1 = fix_radius(r1_in_pixels, self._input_size)
-        r2 = fix_radius(r2_in_pixels, self._input_size)
-        t = fix_point(t_in_pixels, self._input_size)
-        magnitude_direction = fix_radius(magnitude_direction_in_pixels, self._input_size)
+        p = self.pixel_coord_to_norm_coord(p_in_pixels)
+        r1 = self.pixel_value_to_norm_value(r1_in_pixels)
+        r2 = self.pixel_value_to_norm_value(r2_in_pixels)
+        t = self.pixel_coord_to_norm_coord(t_in_pixels)
+        magnitude_direction = self.pixel_value_to_norm_value(magnitude_direction_in_pixels)
 
         # Create the preservation mask
         if mask_in_pixels is not None:
