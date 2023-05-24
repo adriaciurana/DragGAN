@@ -331,7 +331,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                 "magnitude_direction_in_pixels"
                             ],
                             interactive=True,
-                            label="LR",
+                            label="Magnitude direction of d vector (pixels)",
                         ).style(full_width=True)
 
                     with gr.Row():
