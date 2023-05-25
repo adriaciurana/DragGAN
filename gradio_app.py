@@ -819,8 +819,39 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
 
 if __name__ == "__main__":
-    import fire
+    import os
+    import argparse
 
-    app = main()
+    default_network_pkl = os.environ.get("NETWORK_PKL")
+    if default_network_pkl is None or default_network_pkl == "":
+        default_network_pkl = "https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/afhqwild.pkl"
+
+    default_seed = os.environ.get("SEED")
+    if default_seed is None or default_seed == "":
+        default_seed = 42
+
+    default_device = os.environ.get("DEVICE")
+    if default_device is None or default_device == "":
+        default_device = "cuda:0"
+    default_device = default_device if torch.cuda.is_available() else "cpu"
+
+    parser = argparse.ArgumentParser(description="Execute DragGAN using gradio GUI.")
+    parser.add_argument(
+        "--network_pkl", type=str, default=default_network_pkl, help="Path or url of the network pkl", required=False
+    )
+    parser.add_argument("--seed", type=int, default=default_seed, help="Default seed", required=False)
+    parser.add_argument("--device", type=str, default=default_device, help="Device (cpu or cuda:index)", required=False)
+    parser.add_argument("--share", action="store_true", help="Share gradio GUI", required=False)
+
+    args = parser.parse_args()
+
+    app = main(
+        network_pkl=args.network_pkl,
+        default_seed=args.seed,
+        device=args.device,
+    )
+
+    share = args.share | bool(os.environ.get("SHARE", False))
+
     gr.close_all()
-    fire.Fire(app.queue(concurrency_count=2, max_size=20).launch)
+    app.queue(concurrency_count=2, max_size=20).launch(share=share, server_name='0.0.0.0')

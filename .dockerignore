@@ -1,0 +1,16 @@
+docs
+env
+old
+__pycache__
+**/__pycache__
+flagged
+execute_docker.sh
+execute_docker_gpu.sh
+Dockerfile
+README.md
+colab_notebook.ipynb
+.flake8
+.black
+.flagged
+pyproject.toml
+LICENSE

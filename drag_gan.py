@@ -114,7 +114,14 @@ class DragGAN:
         self._features_extractor_layer = features_extractor_layer
         self._features_extractor_size = features_extractor_size
         self._features_extractor_dims = features_extractor_dims
-        self._device = device
+        self._device = torch.device(device)
+
+        # If the device is cpu, we need to remap some layers to make it compatible (remove the half precision layers)
+        if self._device.type == "cpu":
+            self._G = self._G.float()
+            for _, module in self._G.named_modules():
+                if hasattr(module, "use_fp16"):
+                    module.use_fp16 = False
 
     def pixel_coord_to_norm_coord(self, p: torch.Tensor):
         return self.pixel_value_to_norm_value(p) - 1
