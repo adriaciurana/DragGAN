@@ -49,7 +49,7 @@ def init_drag_gan_from_path_or_url(path_or_url, global_state, seed, model_value)
     global_state["temporal_params"]["trainable_latent"] = trainable_latent
 
     # Restart draw
-    return global_state, image_raw
+    return global_state, image_raw, global_state["draws"]["image_with_mask"]
 
 
 font = ImageFont.truetype(str(Path(__file__).parent / "misc/Roboto-Medium.ttf"), 32)
@@ -396,12 +396,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Restart draw
             global_state["temporal_params"] = {"trainable_latent": trainable_latent}
 
-            return global_state, image_raw
+            return global_state, image_raw, global_state["draws"]["image_with_mask"]
 
         form_pretrained_dropdown.change(
             on_change_pretrained_dropdown,
             inputs=[form_pretrained_dropdown, global_state, form_seed_number],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         def on_change_model_pickle(model_pickle_file, global_state, seed, model_value):
@@ -410,7 +410,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_model_pickle_file.change(
             on_change_model_pickle,
             inputs=[form_model_pickle_file, global_state, form_seed_number, form_model_dropdown],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         def on_change_model_url(url, global_state, seed, model_value):
@@ -419,7 +419,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_model_url_btn.click(
             on_change_model_url,
             inputs=[form_model_url, global_state, form_seed_number, form_model_dropdown],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         def on_change_project_file(image_file, global_state):
@@ -431,12 +431,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             create_images(image_raw, global_state)
 
-            return global_state, global_state["draws"]["image_with_points"]
+            return global_state, global_state["draws"]["image_with_points"], global_state["draws"]["image_with_points"]
 
         form_project_file.change(
             on_change_project_file,
             inputs=[form_project_file, global_state],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         form_project_iterations_number.change(
@@ -454,24 +454,24 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Restart draw
             global_state["temporal_params"] = {"trainable_latent": trainable_latent}
 
-            return global_state, image_raw
+            return global_state, image_raw, global_state["draws"]["image_with_points"]
 
         form_seed_number.change(
             on_change_seed,
             inputs=[form_seed_number, global_state],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_image_draw],
         )
 
         def on_click_reset_image(global_state):
             global_state["images"]["image_raw"] = global_state["images"]["image_orig"].copy()
             global_state["draws"]["image_with_points"] = global_state["images"]["image_orig"].copy()
 
-            return global_state, global_state["images"]["image_raw"]
+            return global_state, global_state["images"]["image_raw"], global_state["draws"]["image_with_points"]
 
         form_reset_image.click(
             on_click_reset_image,
             inputs=[global_state],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         # Update parameters
@@ -484,12 +484,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Restart draw
             global_state["temporal_params"] = {"trainable_latent": trainable_latent}
 
-            return global_state, image_raw
+            return global_state, image_raw, global_state["draws"]["image_with_points"]
 
         form_update_image_seed_btn.click(
             on_change_update_image_seed,
             inputs=[form_seed_number, global_state],
-            outputs=[global_state, form_image_draw],
+            outputs=[global_state, form_image_draw, form_mask_draw_image],
         )
 
         # Tools tab listeners
