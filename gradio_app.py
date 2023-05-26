@@ -8,32 +8,45 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from drag_gan import DragGAN
+from drag_gan.drag_gan import DragGAN
+from drag_gan.generators.base import BaseGenerator
+from drag_gan.utils import on_change_single_global_state
 
 
-def init_drag_gan(network_pkl, device, seed):
-    drag_gan = DragGAN(network_pkl, device=device)
-    w_latent = drag_gan.get_w_latent_from_seed(seed=seed)
-    image_orig = drag_gan.generate(w_latent)
-    return drag_gan, w_latent, image_orig
+def set_generator_parameters(global_state):
+    global_state["model"].generator.params = global_state["generator_params"]
 
 
-def init_wrapper_drag_gan(ref, global_state, seed):
-    device = global_state["device"]
-    drag_gan, w_latent, image_raw = init_drag_gan(ref, device, int(seed))
+def get_model(global_state):
+    drag_gan: DragGAN = global_state["model"]
+    set_generator_parameters(global_state)
+    return drag_gan
 
-    global_state["image_orig"] = image_raw.copy()
-    global_state["image_raw"] = image_raw
-    global_state["image_draw"] = image_raw.copy()
 
-    global_state["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
-    global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
+def generate_from_seed(drag_gan: DragGAN, seed: int):
+    trainable_latent = drag_gan.get_latent_from_seed(int(seed))
+    image_raw = drag_gan.generate(trainable_latent)
+    return trainable_latent, image_raw
 
-    del global_state["restart_params"]
-    global_state["restart_params"] = {}
+
+def init_drag_gan(generator: BaseGenerator, seed: int):
+    drag_gan = DragGAN(generator)
+    trainable_latent, image_orig = generate_from_seed(drag_gan, seed)
+    return drag_gan, trainable_latent, image_orig
+
+
+def init_drag_gan_from_path_or_url(path_or_url, global_state, seed, model_value):
+    drag_gan: DragGAN = global_state["model"]
+    drag_gan.generator = DragGAN.REGISTERED_GENERATORS[model_value].load_from_path(path_or_url)
+    trainable_latent, image_raw = generate_from_seed(drag_gan, seed)
+
+    create_images(image_raw, global_state)
+
+    global_state["temporal_params"] = {}
 
     global_state["model"] = drag_gan
-    global_state["restart_params"]["w_latent"] = w_latent
+    set_generator_parameters(global_state)
+    global_state["temporal_params"]["trainable_latent"] = trainable_latent
 
     # Restart draw
     return global_state, image_raw
@@ -116,26 +129,19 @@ def draw_mask_on_image(image, mask):
     return Image.alpha_composite(image.convert("RGBA"), im_mask_rgba).convert("RGB")
 
 
-def on_change_single_global_state(keys, value, global_state, map_transform=None):
-    if map_transform is not None:
-        value = map_transform(value)
+def create_images(image_raw, global_state):
+    global_state["images"]["image_orig"] = image_raw.copy()
+    global_state["images"]["image_raw"] = image_raw
+    global_state["draws"]["image_with_points"] = image_raw.copy()
 
-    curr_state = global_state
-    if isinstance(keys, str):
-        last_key = keys
-
-    else:
-        for k in keys[:-1]:
-            curr_state = curr_state[k]
-
-        last_key = keys[-1]
-
-    curr_state[last_key] = value
-    return global_state
+    global_state["images"]["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
+    global_state["draws"]["image_with_mask"] = draw_mask_on_image(
+        global_state["images"]["image_raw"], global_state["images"]["image_mask"]
+    )
 
 
 def main(
-    network_pkl="https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/afhqwild.pkl",
+    generator: BaseGenerator,
     default_seed: int = 42,
     device: str = "cuda:0",
 ):
@@ -178,25 +184,33 @@ Synthesizing visual content that meets users' needs often requires flexible and 
     """
 
     with gr.Blocks(css=css) as app:
-        drag_gan, w_latent, image_orig = init_drag_gan(network_pkl, device, default_seed)
+        drag_gan, trainable_latent, image_orig = init_drag_gan(
+            DragGAN.REGISTERED_GENERATORS["StyleGANv2Generator"].load_from_pretrained("afhqwild"), 42
+        )  # The force of the lion!
 
         global_state = gr.State(
             {
-                "restart_params": {
-                    "w_latent": w_latent,
+                "images": {
+                    # image_orig
+                    # image_raw
+                    # image_mask
                 },
+                "draws": {
+                    # image_with_points
+                    # image_with_mask
+                },
+                "temporal_params": {
+                    "trainable_latent": trainable_latent,
+                },
+                "generator_params": {},
                 "params": {
                     "motion_lr": 2e-3,
                     "motion_lambda": 20,
-                    "trainable_w_dims": 6,
                     "r1_in_pixels": 3,
                     "r2_in_pixels": 12,
                     "magnitude_direction_in_pixels": 1.0,
                 },
                 "device": device,
-                "image_orig": image_orig.copy(),
-                "image_raw": image_orig,
-                "image_mask": np.ones((image_orig.size[1], image_orig.size[0]), dtype=np.uint8),
                 "draw_interval": 5,
                 "radius_mask": 51,
                 "projection_steps": 1_000,
@@ -204,19 +218,9 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 "points": {},
                 "curr_point": None,
                 "curr_type_point": "start",
-                # opt params
-                "restart": True,
             }
         )
-        image_draw = draw_points_on_image(
-            global_state.value["image_raw"],
-            global_state.value["points"],
-            global_state.value["curr_point"],
-        )
-        global_state.value["image_draw"] = image_draw
-
-        image_mask_draw = draw_mask_on_image(global_state.value["image_raw"], global_state.value["image_mask"])
-        global_state.value["image_mask_draw"] = image_draw
+        create_images(image_orig, global_state.value)
 
         with gr.Row():
             # Left column
@@ -229,6 +233,20 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
                 with gr.Accordion("Network & latent"):
                     with gr.Row():
+                        form_model_dropdown = gr.Dropdown(
+                            choices=list(DragGAN.REGISTERED_GENERATORS.keys()),
+                            label="Models",
+                            value="StyleGANv2Generator",
+                        )
+
+                    with gr.Row():
+                        with gr.Tab("Pretrained models"):
+                            form_pretrained_dropdown = gr.Dropdown(
+                                choices=list(StyleGANv2Generator.PRETRAINED_MODELS.keys()),
+                                label="Pretrained model",
+                                value="afhqwild",
+                            )
+
                         with gr.Tab("Local file"):
                             form_model_pickle_file = gr.File(label="Pickle file")
 
@@ -240,7 +258,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                 )
                                 form_model_url_btn = gr.Button("Submit")
 
-                    with gr.Row():
+                    with gr.Row().style(equal_height=True):
                         with gr.Tab("Image seed"):
                             with gr.Row():
                                 form_seed_number = gr.Number(
@@ -248,6 +266,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                     interactive=True,
                                     label="Seed",
                                 )
+                                form_update_image_seed_btn = gr.Button("Update image")
 
                         with gr.Tab("Image projection"):
                             with gr.Row():
@@ -257,7 +276,11 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                     label="Image projection num steps",
                                 )
 
-                    form_reset_image = gr.Button("Reset image")
+                        form_reset_image = gr.Button("Reset image")
+
+                    with gr.Row():
+                        with gr.Tab("Generator Parameters"):
+                            generator.get_gradio_panel(global_state)
 
                 with gr.Accordion("Tools"):
                     with gr.Tab("Pair-Points") as points_tab:
@@ -295,8 +318,9 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                     with gr.Row():
                         with gr.Tab("Run"):
                             with gr.Row():
-                                form_start_btn = gr.Button("Start").style(full_width=True)
-                                form_stop_btn = gr.Button("Stop").style(full_width=True)
+                                with gr.Column():
+                                    form_start_btn = gr.Button("Start").style(full_width=True)
+                                    form_stop_btn = gr.Button("Stop").style(full_width=True)
                                 form_steps_number = gr.Number(value=0, label="Steps", interactive=False).style(
                                     full_width=False
                                 )
@@ -315,11 +339,6 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                                     value=global_state.value["params"]["motion_lambda"],
                                     interactive=True,
                                     label="Lambda",
-                                ).style(full_width=True)
-                                form_trainable_w_dims_number = gr.Number(
-                                    value=global_state.value["params"]["trainable_w_dims"],
-                                    interactive=True,
-                                    label="Trainable W latent dims",
                                 ).style(full_width=True)
                                 form_motion_lr_number = gr.Number(
                                     value=global_state.value["params"]["motion_lr"],
@@ -346,47 +365,73 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             # Right column
             with gr.Column():
-                form_image_draw = gr.Image(image_draw, elem_classes="image_nonselectable")
+                form_image_draw = gr.Image(
+                    global_state.value["draws"]["image_with_points"], elem_classes="image_nonselectable"
+                )
                 form_mask_draw_image = gr.Image(
-                    image_mask_draw,
+                    global_state.value["draws"]["image_with_mask"],
                     visible=False,
                     elem_classes="image_nonselectable",
                 )
                 gr.Markdown("Credits: Adrià Ciurana Lanau | info@dreamlearning.ai")
 
         # Network & latents tab listeners
-        def on_change_model_pickle(model_pickle_file, global_state, seed):
-            return init_wrapper_drag_gan(model_pickle_file.name, global_state, seed)
+        def on_change_model(model_value, global_state):
+            model: DragGAN = get_model(global_state)
+            model.generator = model.REGISTERED_GENERATORS[model_value]()
 
-        form_model_pickle_file.change(
-            on_change_model_pickle,
-            inputs=[form_model_pickle_file, global_state, form_seed_number],
+            return gr.Dropdown.update(choices=list(model.generator.PRETRAINED_MODELS.keys()))
+
+        form_model_dropdown.change(
+            on_change_model, inputs=[form_model_dropdown, global_state], outputs=[form_pretrained_dropdown]
+        )
+
+        def on_change_pretrained_dropdown(pretrained_value, global_state, seed):
+            model: DragGAN = get_model(global_state)
+            model.generator = model.generator.load_from_pretrained(pretrained_value)
+            trainable_latent, image_raw = generate_from_seed(model, seed)
+
+            create_images(image_raw, global_state)
+
+            # Restart draw
+            global_state["temporal_params"] = {"trainable_latent": trainable_latent}
+
+            return global_state, image_raw
+
+        form_pretrained_dropdown.change(
+            on_change_pretrained_dropdown,
+            inputs=[form_pretrained_dropdown, global_state, form_seed_number],
             outputs=[global_state, form_image_draw],
         )
 
-        def on_change_model_url(url, global_state, seed):
-            return init_wrapper_drag_gan(url, global_state, seed)
+        def on_change_model_pickle(model_pickle_file, global_state, seed, model_value):
+            return init_drag_gan_from_path_or_url(model_pickle_file.name, global_state, seed, model_value)
+
+        form_model_pickle_file.change(
+            on_change_model_pickle,
+            inputs=[form_model_pickle_file, global_state, form_seed_number, form_model_dropdown],
+            outputs=[global_state, form_image_draw],
+        )
+
+        def on_change_model_url(url, global_state, seed, model_value):
+            return init_drag_gan_from_path_or_url(url, global_state, seed, model_value)
 
         form_model_url_btn.click(
             on_change_model_url,
-            inputs=[form_model_url, global_state, form_seed_number],
+            inputs=[form_model_url, global_state, form_seed_number, form_model_dropdown],
             outputs=[global_state, form_image_draw],
         )
 
         def on_change_project_file(image_file, global_state):
-            drag_gan: DragGAN = global_state["model"]
+            drag_gan: DragGAN = get_model(global_state)
             num_steps = global_state["projection_steps"]
-            w_latent = drag_gan.project(Image.open(image_file.name), num_steps=num_steps, verbose=True)
+            trainable_latent = drag_gan.project(Image.open(image_file.name), num_steps=num_steps, verbose=True)
 
-            image_raw = drag_gan.generate(w_latent)
-            global_state["image_orig"] = image_raw.copy()
-            global_state["image_raw"] = image_raw
-            global_state["image_draw"] = image_raw.copy()
+            image_raw = drag_gan.generate(trainable_latent)
 
-            global_state["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
-            global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
+            create_images(image_raw, global_state)
 
-            return global_state, global_state["image_draw"]
+            return global_state, global_state["draws"]["image_with_points"]
 
         form_project_file.change(
             on_change_project_file,
@@ -401,21 +446,13 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
 
         def on_change_seed(seed, global_state):
-            drag_gan: DragGAN = global_state["model"]
-            w_latent = drag_gan.get_w_latent_from_seed(int(seed))
-            image_raw = drag_gan.generate(w_latent)
+            drag_gan: DragGAN = get_model(global_state)
+            trainable_latent, image_raw = generate_from_seed(drag_gan, int(seed))
 
-            global_state["image_orig"] = image_raw.copy()
-            global_state["image_raw"] = image_raw
-            global_state["image_draw"] = image_raw.copy()
+            create_images(image_raw, global_state)
 
-            global_state["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
-            global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
-
-            del global_state["restart_params"]
-            global_state["restart_params"] = {}
-            global_state["restart_params"]["w_latent"] = w_latent
             # Restart draw
+            global_state["temporal_params"] = {"trainable_latent": trainable_latent}
 
             return global_state, image_raw
 
@@ -426,10 +463,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
 
         def on_click_reset_image(global_state):
-            global_state["image_raw"] = global_state["image_orig"].copy()
-            global_state["image_draw"] = global_state["image_orig"].copy()
+            global_state["images"]["image_raw"] = global_state["images"]["image_orig"].copy()
+            global_state["draws"]["image_with_points"] = global_state["images"]["image_orig"].copy()
 
-            return global_state, global_state["image_raw"]
+            return global_state, global_state["images"]["image_raw"]
 
         form_reset_image.click(
             on_click_reset_image,
@@ -437,11 +474,29 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             outputs=[global_state, form_image_draw],
         )
 
+        # Update parameters
+        def on_change_update_image_seed(seed, global_state):
+            drag_gan: DragGAN = get_model(global_state)
+            trainable_latent, image_raw = generate_from_seed(drag_gan, int(seed))
+
+            create_images(image_raw, global_state)
+
+            # Restart draw
+            global_state["temporal_params"] = {"trainable_latent": trainable_latent}
+
+            return global_state, image_raw
+
+        form_update_image_seed_btn.click(
+            on_change_update_image_seed,
+            inputs=[form_seed_number, global_state],
+            outputs=[global_state, form_image_draw],
+        )
+
         # Tools tab listeners
         def on_change_dropdown_points(curr_point, global_state):
             global_state["curr_point"] = curr_point
             image_draw = draw_points_on_image(
-                global_state["image_raw"],
+                global_state["images"]["image_raw"],
                 global_state["points"],
                 global_state["curr_point"],
             )
@@ -463,16 +518,6 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_lambda_number.change(
             partial(on_change_single_global_state, ["params", "motion_lambda"]),
             inputs=[form_lambda_number, global_state],
-            outputs=[global_state],
-        )
-
-        form_trainable_w_dims_number.change(
-            partial(
-                on_change_single_global_state,
-                ["params", "trainable_w_dims"],
-                map_transform=lambda x: int(x),
-            ),
-            inputs=[form_trainable_w_dims_number, global_state],
             outputs=[global_state],
         )
 
@@ -524,7 +569,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Prepare the points for the inference
             if len(global_state["points"]) == 0:
                 image_draw = draw_points_on_image(
-                    global_state["image_draw"],
+                    global_state["draws"]["image_with_points"],
                     global_state["points"],
                     global_state["curr_point"],
                 )
@@ -555,12 +600,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Mask for the paper:
             # M=1 that you want to edit
             # M=0 that you want to preserve
-            mask_in_pixels = torch.tensor(global_state["image_mask"]).float()
+            mask_in_pixels = torch.tensor(global_state["images"]["image_mask"]).float()
 
             # Init the DragGAN
+            drag_gan: DragGAN = get_model(global_state)
+            trainable_latent = global_state["temporal_params"]["trainable_latent"]
             (
-                w_latent_learn,
-                w_latent_fix,
                 p,
                 r1,
                 r2,
@@ -571,8 +616,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 p_init,
                 F0,
             ) = drag_gan.init(
-                w_latent=global_state["restart_params"]["w_latent"],
-                trainable_w_dims=global_state["params"]["trainable_w_dims"],
+                trainable_latent=trainable_latent,
                 p_in_pixels=p_in_pixels,
                 r1_in_pixels=r1_in_pixels,
                 r2_in_pixels=r2_in_pixels,
@@ -580,22 +624,21 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 magnitude_direction_in_pixels=global_state["params"]["magnitude_direction_in_pixels"],
                 mask_in_pixels=mask_in_pixels,
                 motion_lr=global_state["params"]["motion_lr"],
-                optimizer=global_state["restart_params"].get("optimizer", None),
+                optimizer=global_state["temporal_params"].get("optimizer", None),
             )
-            global_state["restart_params"]["stop"] = False
+            global_state["temporal_params"]["stop"] = False
 
             # Start to iterate
             step_idx = 0
             while True:
                 # Stop the iteration if the user press the button
-                if global_state["restart_params"]["stop"]:
+                if global_state["temporal_params"]["stop"]:
                     break
 
                 p = drag_gan.step(
                     optimizer=optimizer,
                     motion_lambda=global_state["params"]["motion_lambda"],
-                    w_latent_learn=w_latent_learn,
-                    w_latent_fix=w_latent_fix,
+                    trainable_latent=trainable_latent,
                     F0=F0,
                     p_init=p_init,
                     p=p,
@@ -619,8 +662,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                         global_state["points"][key_point]["target"] = t_i.tolist()
 
                     # Generate the image
-                    img_step_pil = drag_gan.generate_image_from_split_w_latent(w_latent_learn, w_latent_fix)
-                    global_state["image_raw"] = img_step_pil
+                    img_step_pil = drag_gan.generate(trainable_latent)
+                    global_state["images"]["image_raw"] = img_step_pil
 
                     # Draw points on the image
                     image_draw = draw_points_on_image(
@@ -635,8 +678,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 step_idx += 1
 
             # Create the output result
-            w_latent = global_state["restart_params"]["w_latent"]
-            image_result = drag_gan.generate(w_latent)
+            trainable_latent = global_state["temporal_params"]["trainable_latent"]
+            image_result = drag_gan.generate(trainable_latent)
 
             fp = NamedTemporaryFile(suffix=".png", delete=False)
             image_result.save(fp, "PNG")
@@ -650,7 +693,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         )
 
         def on_click_stop(global_state):
-            global_state["restart_params"]["stop"] = True
+            global_state["temporal_params"]["stop"] = True
 
             return global_state
 
@@ -696,7 +739,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             del global_state["points"][choice]
 
             choices = list(global_state["points"].keys())
-            global_state["curr_point"] = choices[0]
+
+            if len(choices) > 0:
+                global_state["curr_point"] = choices[0]
+
             return (
                 gr.Dropdown.update(choices=choices, value=choices[0]),
                 global_state,
@@ -710,15 +756,17 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
         # Mask
         def on_click_reset_mask(global_state):
-            global_state["image_mask"] = np.ones(
+            global_state["images"]["image_mask"] = np.ones(
                 (
-                    global_state["image_raw"].size[1],
-                    global_state["image_raw"].size[0],
+                    global_state["images"]["image_raw"].size[1],
+                    global_state["images"]["image_raw"].size[0],
                 ),
                 dtype=np.uint8,
             )
-            global_state["image_mask_draw"] = draw_mask_on_image(global_state["image_raw"], global_state["image_mask"])
-            return global_state, global_state["image_mask_draw"]
+            global_state["draws"]["image_with_mask"] = draw_mask_on_image(
+                global_state["images"]["image_raw"], global_state["images"]["image_mask"]
+            )
+            return global_state, global_state["draws"]["image_with_mask"]
 
         form_reset_mask_btn.click(
             on_click_reset_mask,
@@ -769,7 +817,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             xy = evt.index
             curr_point = global_state["curr_point"]
             if curr_point is None:
-                return global_state, global_state["image_raw"]
+                return global_state, global_state["images"]["image_raw"]
 
             curr_type_point = global_state["curr_type_point"]
             if curr_type_point == "start (p)":
@@ -781,11 +829,11 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             # Draw on image
             image_draw = draw_points_on_image(
-                global_state["image_raw"],
+                global_state["images"]["image_raw"],
                 global_state["points"],
                 global_state["curr_point"],
             )
-            global_state["image_draw"] = image_draw
+            global_state["draws"]["image_with_points"] = image_draw
 
             return global_state, image_draw
 
@@ -800,14 +848,14 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             radius_mask = int(global_state["radius_mask"])
 
-            image_mask = np.uint8(255 * global_state["image_mask"])
+            image_mask = np.uint8(255 * global_state["images"]["image_mask"])
             image_mask = cv2.circle(image_mask, xy, radius_mask, 0, -1) > 127
-            global_state["image_mask"] = image_mask
+            global_state["images"]["image_mask"] = image_mask
 
-            image_mask_draw = draw_mask_on_image(global_state["image_raw"], image_mask)
-            global_state["image_mask_draw"] = image_mask_draw
+            image_with_mask = draw_mask_on_image(global_state["images"]["image_raw"], image_mask)
+            global_state["draws"]["image_with_mask"] = image_with_mask
 
-            return global_state, image_mask_draw
+            return global_state, image_with_mask
 
         form_mask_draw_image.select(
             on_click_mask,
@@ -819,8 +867,8 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
 
 if __name__ == "__main__":
-    import os
     import argparse
+    import os
 
     default_network_pkl = os.environ.get("NETWORK_PKL")
     if default_network_pkl is None or default_network_pkl == "":
@@ -845,8 +893,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    app = main(
+    # StyleganV2 for now
+    from drag_gan.generators.styleganv2 import StyleGANv2Generator
+
+    generator = StyleGANv2Generator(
         network_pkl=args.network_pkl,
+    )
+
+    app = main(
+        generator=generator,
         default_seed=args.seed,
         device=args.device,
     )
@@ -854,4 +909,4 @@ if __name__ == "__main__":
     share = args.share | bool(os.environ.get("SHARE", False))
 
     gr.close_all()
-    app.queue(concurrency_count=2, max_size=20).launch(share=share, server_name='0.0.0.0')
+    app.queue(concurrency_count=2, max_size=20).launch(share=share, server_name="0.0.0.0")
