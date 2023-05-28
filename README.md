@@ -12,10 +12,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
 # TODO
 - [x] Create docker for CPU and GPU.
+- [x] Generalize for other models.
 - [ ] Improve code quality.
 - [ ] Create docstring.
 - [ ] Improve gradio app.
-- [ ] Generalize for other models.
 
 
 # Install
@@ -35,15 +35,17 @@ I suggest to install pytorch separately with the CUDA version that you need.
 # Implementation
 In the file drag_gan.py you will find the entire implementation of the paper. The implementation is efficient (only uses pytorch).
 
-Use pytorch hooks that allow flexibility for future styleganv2 networks. From the constructor you must define which layers you want to use for the DragGAN (it would also be possible to change to another architecture with few changes).
+Use pytorch hooks that allow flexibility for future generative networks. From the constructor you must define which layers you want to use for the DragGAN (it would also be possible to change to another architecture if you inherits from `BaseGenerator`).
 
 # GUI
 ![Cover](docs/cover.gif)
 
-Additionally, a GUI has been created to be able to apply the paper to images.
+Additionally, a GUI has been created to be able to apply the paper on your own images.
 ```
 python gradio_app.py
 ```
+
+For now, I'm having trouble with gradio to improve the GUI for drawing masks ( https://github.com/gradio-app/gradio/issues/2224 and https://github.com/gradio-app/gradio/topics/2054).
 
 # Citation
 ```
