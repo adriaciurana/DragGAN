@@ -214,7 +214,7 @@ class StyleGANv2Generator(BaseGenerator):
             value=6,
             interactive=True,
             label="Trainable W latent dims",
-        ).style(full_width=True)
+        )
         form_trainable_w_dims_number.change(
             on_change_w_latent_dims,
             inputs=[form_trainable_w_dims_number, global_state],
@@ -229,7 +229,7 @@ class StyleGANv2Generator(BaseGenerator):
             value=0.85,
             interactive=True,
             label="Truncation psi",
-        ).style(full_width=True)
+        )
         form_truncation_psi_number.change(
             on_change_truncation_psi,
             inputs=[form_truncation_psi_number, global_state],
