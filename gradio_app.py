@@ -132,7 +132,9 @@ def draw_mask_on_image(image, mask):
 def create_images(image_raw, global_state):
     global_state["images"]["image_orig"] = image_raw.copy()
     global_state["images"]["image_raw"] = image_raw
-    global_state["draws"]["image_with_points"] = image_raw.copy()
+    global_state["draws"]["image_with_points"] = draw_points_on_image(
+        image_raw, global_state["points"], global_state["curr_point"]
+    )
 
     global_state["images"]["image_mask"] = np.ones((image_raw.size[1], image_raw.size[0]), dtype=np.uint8)
     global_state["draws"]["image_with_mask"] = draw_mask_on_image(
@@ -213,7 +215,6 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 "device": device,
                 "draw_interval": 5,
                 "radius_mask": 51,
-                "projection_steps": 1_000,
                 "model": drag_gan,
                 "points": {},
                 "curr_point": None,
@@ -272,9 +273,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                             with gr.Row():
                                 form_project_file = gr.File(label="Image project file")
                                 form_project_iterations_number = gr.Number(
-                                    value=global_state.value["projection_steps"],
+                                    value=1_000,
                                     label="Image projection num steps",
                                 )
+                                form_update_image_project_btn = gr.Button("Run projection")
 
                         form_reset_image = gr.Button("Reset image")
 
@@ -368,7 +370,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                 form_image_draw = gr.Image(
                     global_state.value["draws"]["image_with_points"], elem_classes="image_nonselectable"
                 )
-                form_mask_draw_image = gr.Image(
+                form_image_mask_draw = gr.Image(
                     global_state.value["draws"]["image_with_mask"],
                     visible=False,
                     elem_classes="image_nonselectable",
@@ -401,7 +403,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_pretrained_dropdown.change(
             on_change_pretrained_dropdown,
             inputs=[form_pretrained_dropdown, global_state, form_seed_number],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         def on_change_model_pickle(model_pickle_file, global_state, seed, model_value):
@@ -410,7 +412,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_model_pickle_file.change(
             on_change_model_pickle,
             inputs=[form_model_pickle_file, global_state, form_seed_number, form_model_dropdown],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         def on_change_model_url(url, global_state, seed, model_value):
@@ -419,30 +421,31 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_model_url_btn.click(
             on_change_model_url,
             inputs=[form_model_url, global_state, form_seed_number, form_model_dropdown],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
-        def on_change_project_file(image_file, global_state):
+        def on_click_run_projection(image_file, project_iterations_number, global_state):
+            print("Done")
+            print("Done")
+            print("Done")
+            print("Done")
+            print("Done")
             drag_gan: DragGAN = get_model(global_state)
-            num_steps = global_state["projection_steps"]
-            trainable_latent = drag_gan.project(Image.open(image_file.name), num_steps=num_steps, verbose=True)
+            trainable_latent = drag_gan.project(
+                Image.open(image_file.name), num_steps=int(project_iterations_number), verbose=True
+            )
+            global_state["temporal_params"]["trainable_latent"] = trainable_latent
 
             image_raw = drag_gan.generate(trainable_latent)
 
             create_images(image_raw, global_state)
 
-            return global_state, global_state["draws"]["image_with_points"], global_state["draws"]["image_with_points"]
+            return global_state, global_state["draws"]["image_with_points"], global_state["draws"]["image_with_mask"]
 
-        form_project_file.change(
-            on_change_project_file,
-            inputs=[form_project_file, global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
-        )
-
-        form_project_iterations_number.change(
-            partial(on_change_single_global_state, "projection_steps"),
-            inputs=[form_project_iterations_number, global_state],
-            outputs=[global_state],
+        form_update_image_project_btn.click(
+            on_click_run_projection,
+            inputs=[form_project_file, form_project_iterations_number, global_state],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         def on_change_seed(seed, global_state):
@@ -454,7 +457,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Restart draw
             global_state["temporal_params"] = {"trainable_latent": trainable_latent}
 
-            return global_state, image_raw, global_state["draws"]["image_with_points"]
+            return global_state, image_raw, global_state["draws"]["image_with_mask"]
 
         form_seed_number.change(
             on_change_seed,
@@ -466,12 +469,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             global_state["images"]["image_raw"] = global_state["images"]["image_orig"].copy()
             global_state["draws"]["image_with_points"] = global_state["images"]["image_orig"].copy()
 
-            return global_state, global_state["images"]["image_raw"], global_state["draws"]["image_with_points"]
+            return global_state, global_state["images"]["image_raw"], global_state["draws"]["image_with_mask"]
 
         form_reset_image.click(
             on_click_reset_image,
             inputs=[global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         # Update parameters
@@ -484,12 +487,12 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             # Restart draw
             global_state["temporal_params"] = {"trainable_latent": trainable_latent}
 
-            return global_state, image_raw, global_state["draws"]["image_with_points"]
+            return global_state, image_raw, global_state["draws"]["image_with_mask"]
 
         form_update_image_seed_btn.click(
             on_change_update_image_seed,
             inputs=[form_seed_number, global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         # Tools tab listeners
@@ -662,17 +665,24 @@ Synthesizing visual content that meets users' needs often requires flexible and 
                         global_state["points"][key_point]["target"] = t_i.tolist()
 
                     # Generate the image
-                    img_step_pil = drag_gan.generate(trainable_latent)
-                    global_state["images"]["image_raw"] = img_step_pil
+                    image_step_pil = drag_gan.generate(trainable_latent)
+                    global_state["images"]["image_raw"] = image_step_pil
 
                     # Draw points on the image
-                    image_draw = draw_points_on_image(
-                        img_step_pil,
-                        global_state["points"],
-                        global_state["curr_point"],
-                    )
+                    # image_draw = draw_points_on_image(
+                    #     image_step_pil,
+                    #     global_state["points"],
+                    #     global_state["curr_point"],
+                    # )
+                    create_images(image_step_pil, global_state)
 
-                    yield global_state, step_idx, image_draw, gr.File.update(visible=False)
+                    yield (
+                        global_state,
+                        step_idx,
+                        global_state["draws"]["image_with_points"],
+                        global_state["draws"]["image_with_mask"],
+                        gr.File.update(visible=False),
+                    )
 
                 # increate step
                 step_idx += 1
@@ -681,15 +691,23 @@ Synthesizing visual content that meets users' needs often requires flexible and 
             trainable_latent = global_state["temporal_params"]["trainable_latent"]
             image_result = drag_gan.generate(trainable_latent)
 
+            create_images(image_result, global_state)
+
             fp = NamedTemporaryFile(suffix=".png", delete=False)
             image_result.save(fp, "PNG")
 
-            yield global_state, step_idx, image_draw, gr.File.update(visible=True, value=fp.name)
+            yield (
+                global_state,
+                step_idx,
+                global_state["draws"]["image_with_points"],
+                global_state["draws"]["image_with_mask"],
+                gr.File.update(visible=True, value=fp.name),
+            )
 
         form_start_btn.click(
             on_click_start,
             inputs=[global_state],
-            outputs=[global_state, form_steps_number, form_image_draw, form_download_result_file],
+            outputs=[global_state, form_steps_number, form_image_draw, form_image_mask_draw, form_download_result_file],
         )
 
         def on_click_stop(global_state):
@@ -771,7 +789,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         form_reset_mask_btn.click(
             on_click_reset_mask,
             inputs=[global_state],
-            outputs=[global_state, form_mask_draw_image],
+            outputs=[global_state, form_image_mask_draw],
         )
 
         form_radius_mask_number.change(
@@ -796,7 +814,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         points_tab.select(
             on_click_points_tab,
             inputs=[global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         def on_click_mask_tab(global_state):
@@ -810,7 +828,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
         mask_tab.select(
             on_click_mask_tab,
             inputs=[global_state],
-            outputs=[global_state, form_image_draw, form_mask_draw_image],
+            outputs=[global_state, form_image_draw, form_image_mask_draw],
         )
 
         def on_click_image(global_state, evt: gr.SelectData):
@@ -857,10 +875,10 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
             return global_state, image_with_mask
 
-        form_mask_draw_image.select(
+        form_image_mask_draw.select(
             on_click_mask,
             inputs=[global_state],
-            outputs=[global_state, form_mask_draw_image],
+            outputs=[global_state, form_image_mask_draw],
         )
 
     return app

@@ -125,7 +125,7 @@ class DragGAN:
 
     def project(self, image: Image, *args: list[Any], **kargs: dict[str, Any]) -> TrainableLatent:
         assert self.generator is not None
-        return self.generate.project(image, *args, **kargs)
+        return self.generator.project(image, *args, **kargs)
 
     # DragGAN init, step and compute
     def init(
