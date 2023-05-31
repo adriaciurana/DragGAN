@@ -9,7 +9,7 @@ import torch
 from PIL import Image, ImageDraw, ImageFont
 
 from drag_gan.drag_gan import DragGAN
-from drag_gan.generators.base import BaseGenerator
+from drag_gan.generators import BaseGenerator, StyleGANv2Generator
 from drag_gan.utils import on_change_single_global_state
 
 
@@ -187,7 +187,7 @@ Synthesizing visual content that meets users' needs often requires flexible and 
 
     with gr.Blocks(css=css) as app:
         drag_gan, trainable_latent, image_orig = init_drag_gan(
-            DragGAN.REGISTERED_GENERATORS["StyleGANv2Generator"].load_from_pretrained("afhqwild"), 42
+            StyleGANv2Generator.load_from_pretrained("afhqwild"), 42
         )  # The force of the lion!
 
         global_state = gr.State(
@@ -910,9 +910,6 @@ if __name__ == "__main__":
     parser.add_argument("--share", action="store_true", help="Share gradio GUI", required=False)
 
     args = parser.parse_args()
-
-    # StyleganV2 for now
-    from drag_gan.generators.styleganv2 import StyleGANv2Generator
 
     generator = StyleGANv2Generator(
         network_pkl=args.network_pkl,
